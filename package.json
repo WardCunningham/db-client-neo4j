@@ -1,0 +1,31 @@
+{
+  "name": "neo4j-ts-client",
+  "version": "0.0.5",
+  "description": "DB client for Neo4j written in Typescript and Javascript",
+  "main": "dist/db-client.js",
+  "scripts": {
+    "cypher": "node -r ts-node/register/transpile-only src/db-client.ts",
+    "db-funcs": "node -r ts-node/register/transpile-only src/db-funcs.ts",
+    "build": "tsc",
+    "build-web": "esbuild src/db-client.ts --bundle --outfile=dist/db-client-web.js --platform=node --format=iife",
+    "start": "node dist/db-client.js",
+    "start-web": "http-server --cors -o db-client-neo4j-web.html",
+    "test": "node dist/db-client.js -- ok"
+  },
+  "keywords": [
+    "neo4j",
+    "db",
+    "typescript",
+    "javascript",
+    "graph"
+  ],
+  "author": "Peter Dimitrios",
+  "license": "MIT",
+  "dependencies": {
+    "neo4j-driver": "^5.28.0",
+    "ts-node": "^10.9.2"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
