@@ -4,13 +4,32 @@ Thin wrapper for Neo4j DB Javascript driver: https://neo4j.com/docs/api/javascri
 
 From command-line, initial setup to select correct version of nodejs and pull in libraries:
 ```
-nvm use
+nvm use 
+node --version
 npm install
+npm run build
+npm run cypher --help
+```
+
+You can also use `yarn` to run things instead (here we install it your default node environment using the -g option):
+```
 npm install -g yarn
 yarn build
 yarn cypher --help
 ```
-Note that `npm run xxx`  can be used instead of `yarn xxx` if you don't want to install yarn.
+
+For native windows `nvm-windows` can be used to manage nodejs versions: https://learn.microsoft.com/en-us/windows/dev-environment/javascript/nodejs-on-windows#install-nvm-windows-nodejs-and-npm (`winget install CoreyButler.NVMforWindows`)
+and you may need to initially setup via `nvm install 22.13.1` and `nvm use 22.13.1` since it does not read the `.nvmrc` file.
+
+To provide to provide linux-like CLI to run things, windows can use WSL Windows Subsystem for Linux https://learn.microsoft.com/en-us/windows/wsl/install (native with windows `wsl --install` or `winget install Microsoft.WSL` ),
+git-bash https://gitforwindows.org/ (lighter, easy-to-install `winget install Git.Git`),
+or Cygwin https://www.redhat.com/en/blog/hybrid-system-cygwin (more complex setup options `winget install Cygwin.Cygwin`).
+
+
+```
+
+
+Note that in the xamples below `npm run xxx`  can be used instead of `yarn xxx` if you don't want to install yarn.
 
 If you have a local server on neo4j://localhost:7687, can run one of our predefined functions to check connectivity and node counts, or do a real query:
 ```
