@@ -1,9 +1,30 @@
 #!/bin/env node
-// https://neo4j.com/docs/api/javascript-driver/current/
-import neo4j, { Session, BookmarkManager, Config, SessionConfig, ManagedTransaction } from "neo4j-driver"
+import neo4j, { Session, Config, SessionConfig, ManagedTransaction } from "neo4j-driver"
 import { Driver, TransactionConfig } from "neo4j-driver-core"
-import { fromVersion } from "neo4j-driver-core/types/internal/bolt-agent"
 import { parseArgs, inspect } from 'node:util'
+
+/** DB Client for Neo4j DB - implemented as functions (not classes)
+ *  Usage:
+ *    const db = newDbContext({dbName:'neo4j'})
+ *    const arrayOfObjectResults = executeCypher(db, `return 'this is a test'`)
+ *    dbClose(db)
+ * 
+ *  See main() method for detailed example that also acts as a CLI
+ * 
+ * Driver docs are at https://neo4j.com/docs/api/javascript-driver/current/
+*/
+export type DbParmsType = Partial<{
+  positionals: string[];
+  dbUrl: string;
+  dbName: string;
+  dbUser: string;
+  dbPass: string;
+  readonly: boolean;
+  allowwrite: boolean;
+  log: boolean;
+  logresults: boolean;
+  help: boolean;
+}>
 
 export let dbLogFn = null as unknown as Function // set to console.log, console.error or timestampedLog to enable logging
 
@@ -19,7 +40,7 @@ export type DbQueryWithParametersType = {
 }
 
 export type DbContextType = {
-  dbParms: any,
+  dbParms: DbParmsType,
   dbDriverParms: Config,
   dbSessionParms: SessionConfig,
   dbTxnParms: TransactionConfig,
@@ -39,17 +60,28 @@ export function newDbDriver(dbContextOrParms) {
   return neo4j.driver(dbParms.dbUrl, neo4j.auth.basic(dbParms.dbUser, dbParms.dbPass), dbParms.dbDriverParms)
 }
 
+/** Shut down entire DB driver */
 export async function dbClose(db: DbContextType) {
-  await db?.dbSession?.close()
-  db.dbSession = null
+  await dbCloseSession(db)   // May not be explicitly needed, but let's be nice
   const res = await db?.dbDriver?.close()
   db.dbDriver = null
   return res
 }
 
-/** Note that DB is actually not contacted until first cypher query goes through, but driver may check url */
-export function newDbContext(dbContextOrParms): DbContextType {
-  const dbParms = dbContextOrParms.dbParms ?? dbContextOrParms
+/** Close just the active session to the DB (so next request will get a fresh one) */
+export async function dbCloseSession(db: DbContextType) {
+  const res = await db?.dbSession?.close()
+  db.dbSession = null
+  return res
+}
+
+/** Note that DB is actually not contacted until first cypher query goes through, but driver may check url
+ * Parms are normally DbParmsType the result of getParms() call but can also be pulled from another DbContextType
+ * This can allow setting or overriding just certain dbSession or dbTxn parms as needed
+ */
+export function newDbContext(dbContextOrParms, overrides?): DbContextType {
+  const dbParmsOverrides = overrides?.dbParms ?? overrides
+  const dbParms = { ...(dbContextOrParms.dbParms ?? dbContextOrParms), ...dbParmsOverrides }
   dbParms[Symbol.for('nodejs.util.inspect.custom')] = (depth, options) => {  // Avoid logging password
     const { dbPass, ...rest } = { ...dbParms }
     delete rest[Symbol.for('nodejs.util.inspect.custom')]   //ugh
@@ -59,15 +91,15 @@ export function newDbContext(dbContextOrParms): DbContextType {
     }
   }
   dbLogFn?.('newDbContext', dbParms)
-  const db: DbContextType = {
+  let db: DbContextType = {
     dbParms: dbParms,
-    dbDriverParms: dbParms.dbDriverParms,
-    dbSessionParms: { database: dbParms.dbName, ...dbParms.dbSessionParms },
-    dbTxnParms: dbParms.dbTxnParms,
-    dbDriver: dbParms.dbDriver,
+    dbDriverParms: { ...dbParms.dbDriverParms, ...overrides?.dbDriverParms},
+    dbSessionParms: { database: dbParms.dbName, ...dbParms.dbSessionParms, ...overrides?.dbSessionParms },
+    dbTxnParms: { ...dbParms.dbTxnParms, ...overrides?.dbTxnParms },
+    dbDriver: overrides?.dbDriver ?? dbParms.dbDriver,
     dbSession: null,
     dbTxn: null,
-    dbMarks: dbParms.dbMarks,
+    dbMarks: overrides?.dbMarks ?? dbParms.dbMarks,
     dbSummary: null, // flat JSON summary from last results
   }
   if (db.dbDriver == null) {
@@ -339,6 +371,10 @@ export function handleCliArgs(args) {
   return { dbParms: parms, query: query, queryParms: queryParms }
 }
 
+/** DB Client for Neo4j DB 
+ * Note that this provides a CLI but is also an example of using the API.
+ * Driver docs are at https://neo4j.com/docs/api/javascript-driver/current/
+*/
 export async function main(args) {
   const { dbParms, query, queryParms } = handleCliArgs(args)
   if (query == null) {
@@ -347,7 +383,7 @@ export async function main(args) {
   const db = newDbContext(dbParms)
   let data = {}
   try {
-    data = await dbResultAsObjects(db, await executeCypher(db, query, queryParms))
+    data = await executeCypher(db, query, queryParms)
   } finally {
     await dbClose(db)
   }

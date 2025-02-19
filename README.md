@@ -25,20 +25,17 @@ To provide to provide linux-like CLI to run things, windows can use WSL Windows 
 git-bash https://gitforwindows.org/ (lighter, easy-to-install `winget install Git.Git`),
 or Cygwin https://www.redhat.com/en/blog/hybrid-system-cygwin (more complex setup options `winget install Cygwin.Cygwin`).
 
-
-```
-
-
 Note that in the xamples below `npm run xxx`  can be used instead of `yarn xxx` if you don't want to install yarn.
 
 If you have a local server on neo4j://localhost:7687, can run one of our predefined functions to check connectivity and node counts, or do a real query:
 ```
-export NEO4J_PASSWORD=password
+export NEO4J_PASSWORD=pickapassw0rd
 export NEO4J_USERNAME=neo4j
 yarn cypher ok
-yarn nodeCount
+yarn cypher nodeCount
 yarn cypher "match ()-[r]->() return count(r) as numRelationships;"
 ```
+
 Use the `--log` parameter to show more internal details.
 
 By default you get a readonly connection (no writes allowed).  You can pass an `--allowwrite` parameter to allow updates and deletes (be careful!).  This can also be set as a default by setting the environment variable `NEO4J_ALLOWWRITE=1`
@@ -46,20 +43,22 @@ You can explicitly specify a read-only connection for a particular invocation vi
 
 Connectivity parameters can be passed via environment variables or command-line:
 ```
-export NEO4J_PASSWORD=password
+export NEO4J_PASSWORD=pickapassw0rd
 export NEO4J_USERNAME=neo4j
 export NEO4J_DBURL=neo4j+s://abcd5678.databases.neo4j.io:7687
 export NEO4J_DBNAME=neo4j
 yarn cypher echo foo:bar param2:2
 
-NEO4J_PASSWORD=passw0rd 
+NEO4J_PASSWORD=pickapassw0rd 
 yarn cypher --dbUrl 'neo4j://localhost:7687' echo foo:bar param2:2
 ```
+
 The last syntax allows passing string parameters from the CLI.  You need to be careful about nesting single and double quotes correctly, and for most CLI shells characters like dollar-sign ($) need special handling when specifying queries:
 ```
 yarn cypher --allowwrite "merge (n:Value{name:'foo'}) SET n.value='bar' return n.value as value"
 yarn cypher "match (n:Value) where n.name=\$findName return properties(n) as props;" findName:foo
 ```
+
 Here are some more variations, creating a Value node label with unique 'name' field as a key:
 ```
 yarn cypher --allowwrite "create constraint Value_name if not exists for (n:Value) require n.name is unique ;"
