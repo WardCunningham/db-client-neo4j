@@ -1,6 +1,6 @@
 #!/bin/env node
 import neo4j, { Session, Config, SessionConfig, ManagedTransaction } from "neo4j-driver"
-import { Driver, TransactionConfig } from "neo4j-driver-core"
+import { Driver, QueryResult, RecordShape, TransactionConfig } from "neo4j-driver-core"
 import { parseArgs, inspect } from 'node:util'
 
 /** DB Client for Neo4j DB - implemented as functions (not classes)
@@ -42,6 +42,8 @@ export type DbQueryWithParametersType = {
   text: string,
   parameters?: { [parm: string]: any },
 }
+
+export type DbResultRaw = QueryResult<RecordShape>
 
 export type DbContextType = {
   dbParms: DbParmsType,
@@ -97,7 +99,7 @@ export function newDbContext(dbContextOrParms, overrides?): DbContextType {
   dbLogFn?.('newDbContext', dbParms)
   let db: DbContextType = {
     dbParms: dbParms,
-    dbDriverParms: { ...dbParms.dbDriverParms, ...overrides?.dbDriverParms},
+    dbDriverParms: { ...dbParms.dbDriverParms, ...overrides?.dbDriverParms },
     dbSessionParms: { database: dbParms.dbName, ...dbParms.dbSessionParms, ...overrides?.dbSessionParms },
     dbTxnParms: { ...dbParms.dbTxnParms, ...overrides?.dbTxnParms },
     dbDriver: overrides?.dbDriver ?? dbParms.dbDriver,
@@ -110,7 +112,7 @@ export function newDbContext(dbContextOrParms, overrides?): DbContextType {
     db.dbDriver = newDbDriver(dbParms)
     // db.dbSessionParms.bookmarkManager = db.dbDriver.executeQueryBookmarkManager // Can be used to ensure dbDriver.executeQuery is in sync with session.execute
   }
-    if (!dbParms.allowwrite) {
+  if (!dbParms.allowwrite) {
     db.dbSessionParms.defaultAccessMode = 'READ'
   }
   return db
@@ -129,7 +131,7 @@ export function dbForgetBookmarks(db) {
   db.dbMarks = null
   db.dbSessionParms.bookmarks = null
 }
- 
+
 /** Flatten DB query statistics with name/number pairs - avoid 0 values */
 export function flatQueryStatistics(dbQueryStats) {
   return Object.fromEntries(Object.entries(dbQueryStats?._stats ?? {}).filter(([stat, num]) => +num > 0).map(e => e))
@@ -142,24 +144,27 @@ export function cleanupDbSummary(dbSummary) {
   return dbSummary
 }
 
-export async function dbResultAsObjects<T>(db: DbContextType, dbResult) {
+export function objectFromDbResultRecord<T = any>(rec, onlyFields?: PropertyKey[]): T {
+  return onlyFields == null ? rec.toObject() : Object.fromEntries(onlyFields.map(e => [e, rec.get(e)]))
+}
+
+export async function dbResultsAsObjects<T>(db: DbContextType, dbResults: DbResultRaw, onlyFields?: string[]): Promise<T[]> {
   let recs: T[] = []
-  const records = dbResult.records
-  if (records == null || dbResult.summary?.counters == null) {  // already converted
-    return dbResult
+  const records = dbResults?.records
+  if (records == null || dbResults.summary?.counters == null) {  // already converted
+    return dbResults as any as T[]
   }
-  dbResult.records.forEach(rec => {
-    recs.push(rec.toObject())
+  records.forEach(rec => {
+    recs.push(objectFromDbResultRecord<T>(rec, onlyFields))
   })
-  db.dbSummary = cleanupDbSummary(dbResult.summary)
-  db.dbMarks = dbResult.bookmark
+  db.dbSummary = cleanupDbSummary(dbResults.summary)
   // callers can do dbForgetBookmarks(db) if they really have no need for cross-session causal synchronization
   return recs
 }
 
 /** Execute a Cypher query or function ensuring results are converted to objects */
-export async function executeCypher<T>(db: DbContextType, dbQuery: string | DbFunction | DbQueryWithParametersType, parameters?: { [key: string]: any }) {
-  const results = await dbResultAsObjects<T>(db, await executeCypherRawResults<T>(db, dbQuery, parameters))
+export async function executeCypher<T = any>(db: DbContextType, dbQuery: string | DbFunction | DbQueryWithParametersType, parameters?: { [key: string]: any }): Promise<T[]> {
+  const results = await dbResultsAsObjects<T>(db, await executeCypherRawResults<T>(db, dbQuery, parameters))
   if (db.dbParms.logresults) {
     timestampedLog('dbResult', dbQuery, results)
   }
@@ -167,7 +172,7 @@ export async function executeCypher<T>(db: DbContextType, dbQuery: string | DbFu
 }
 
 /** Execute a Cypher query or function as a read/write transaction without converting results */
-export async function executeCypherRawResults<T>(db: DbContextType, dbQuery: string | DbFunction | DbQueryWithParametersType, parameters?: { [key: string]: any }) {
+export async function executeCypherRawResults<T = any>(db: DbContextType, dbQuery: string | DbFunction | DbQueryWithParametersType, parameters?: { [key: string]: any }): Promise<DbResultRaw> {
   const isQueryFunction = typeof dbQuery === 'function'
   let dbQueryWithParms = dbQuery as DbQueryWithParametersType
   if (typeof dbQuery === 'string') {
@@ -186,7 +191,7 @@ export async function executeCypherRawResults<T>(db: DbContextType, dbQuery: str
   }
   const dbQueryFn = isQueryFunction ? dbQuery : async (db: DbContextType) => {
     // causal consistency bookmarks are maintained within a transaction
-    return await db.dbTxn.run(dbQueryWithParms.text, dbQueryWithParms.parameters)
+    return await db.dbTxn.run<T>(dbQueryWithParms.text, dbQueryWithParms.parameters)
   }
   if (db.dbTxn == null) {
     let dbResult = null
@@ -371,7 +376,7 @@ export function handleCliArgs(args) {
     }
   }
   if (parms.log) {
-    inspect.defaultOptions = { depth: 18, compact: 18, breakLength:240 }
+    inspect.defaultOptions = { depth: 18, compact: 18, breakLength: 240 }
     dbLogFn = timestampedLog
   }
   if (parms.logresults) {
