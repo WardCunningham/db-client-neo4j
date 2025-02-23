@@ -5,11 +5,12 @@ import { parseArgs, inspect } from 'node:util'
 
 /** DB Client for Neo4j DB - implemented as functions (not classes)
  *  Usage:
- *    const db = newDbContext({dbName:'neo4j'})
+ *    const db = newDbContext({dbName:'neo4j', dbUrl:''neo4j://localhost:7687'})
  *    const arrayOfObjectResults = executeCypher(db, `return 'this is a test'`)
  *    dbClose(db)
  * 
  *  See main() method for detailed example that also acts as a CLI
+ *  Can extend list of PredefinedDbFunctions - see (db-funcs.ts)[./db-funcs.ts]
  * 
  * Driver docs are at https://neo4j.com/docs/api/javascript-driver/current/
 */
@@ -21,12 +22,15 @@ export type DbParmsType = Partial<{
   dbPass: string;
   readonly: boolean;
   allowwrite: boolean;
+  quiet: boolean;
   log: boolean;
   logresults: boolean;
   help: boolean;
 }>
 
 export let dbLogFn = null as unknown as Function // set to console.log, console.error or timestampedLog to enable logging
+
+export let dbConsoleLogStdout = console.log // used for stdout to echo final output or not if --quiet option specified 
 
 /** log function adds timestamp */
 export function timestampedLog(msg: string, ...rest) {
@@ -250,9 +254,9 @@ export const PredefinedDbFunctions: { [functionName: string]: DbFunction } = {
   },
 }
 
-/** Handle simple args from CLI as name:value */
+/** Handle simple args from CLI as name=value */
 export function queryParmsFromCLI(args: string[]) {
-  return Object.fromEntries(args.map(e => e.split(':', 2)))
+  return Object.fromEntries(args.map(e => e.split('=', 2)))
 }
 
 export function isValueTrue(valOrStr) {
@@ -295,6 +299,10 @@ export function getParms(args) {
       logresults: {
         type: 'boolean',
       },
+      quiet: {
+        type: 'boolean',
+        short: 'q',
+      },
       help: {
         type: 'boolean',
         short: 'h',
@@ -318,8 +326,8 @@ export function getParms(args) {
 }
 
 export function help() {
-  console.log(`yarn db-client [settings] "cypher query" [key1:val1] [key2:val2]
-Execute a Neo4j cypher DB query or predefined functions, optionally passing in string key:value parameters 
+  console.log(`yarn db-client [settings] "cypher query" [key1=val1] [key2=val2]
+Execute a Neo4j cypher DB query or predefined functions, optionally passing in string key=value parameters 
 that can be accessed in the query via neo4j $key references.
 
 Default is to allow only read operations - no writing allowed.
@@ -333,6 +341,7 @@ Optional settings - some may be set by environment variables too:
  --readonly   | -r : override allowwrite flag for this invocation (in case env variable is set)
  --log        | -l : log internal flows and DB response details to stderr
  --logresults      : log query and results to stderr (independent of --log)
+ --quiet      | -q : Do not display result to stdout console.log (does not affect --log* output)
  --help  | ?  | -h : Display this help
 
  PredefinedDbFunctions: ${Object.keys(PredefinedDbFunctions).join(' ')}
@@ -388,7 +397,9 @@ export async function main(args) {
     await dbClose(db)
   }
   dbLogFn?.('main', db)
-  console.log(JSON.stringify({ result: data }))
+  if (!dbParms.quiet) {
+    dbConsoleLogStdout(JSON.stringify({ result: data }))
+  }
   return data
 }
 

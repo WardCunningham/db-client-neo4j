@@ -12,8 +12,11 @@ function addMoreDbFunctions() {
   * Example invocation: 
   *   yarn db-funcs exportToCsv label:Value limit:200
   * 
-  * Optionally, can pass a filename in, but exporting to a file places it in the Neo4j server filesystem,
-  * which requires additional server settings in apoc.conf:
+  * You can write that 'data' to the 
+  * 
+  * Optionally, can pass a server filename in, but exporting to a file places it in the Neo4j server filesystem,
+  * which can handle large exports quickly.
+  * This requires additional DB server settings in apoc.conf:
   *  apoc.export.file.enabled=true
   *  server.directories.import  is the directory that will be used
   * https://neo4j.com/docs/apoc/5/export/csv/*
@@ -23,7 +26,7 @@ function addMoreDbFunctions() {
   * See running-neo4j.md  for how to set that up in a local neo4j DB container
   * 
   * Example invocation: 
-  *   yarn db-funcs exportToCsv label:Value limit:200 file:values.csv
+  *   yarn db-funcs exportToCsv label:Value limit:200 serverfile:values.csv
   */
   p.exportToCsv = async (db, parms) => {
     // Note that we use some javacript template values via ${xxx} substitution, and internal cypher parameter ones via $xxx
